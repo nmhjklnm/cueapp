@@ -1,5 +1,6 @@
 {
   "name": "@cueapp/desktop",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -7,20 +8,21 @@
     "dev": "pnpm build && electron .",
     "start": "pnpm build && electron .",
     "build": "tsc -p tsconfig.json",
-    "pack:mac": "electron-builder --mac --dir",
-    "dist:mac": "electron-builder --mac",
+    "pack:mac": "pnpm build && electron-builder --mac --dir",
+    "dist:mac": "pnpm build && electron-builder --mac",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.0",
     "chardet": "^2.1.1",
-    "electron": "^33.0.0",
     "iconv-lite": "^0.7.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.2",
+    "electron": "^33.0.0",
     "electron-builder": "^24.13.3",
+    "prebuild-install": "^7.1.2",
     "typescript": "^5.7.3"
   },
   "build": {
@@ -42,7 +44,29 @@
         "filter": [
           "**/*",
           "!**/.git/**",
+          "!**/.next/**",
           "!**/node_modules/.cache/**"
+        ]
+      },
+      {
+        "from": "../console/public",
+        "to": "apps/console/public",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../console/.next/standalone",
+        "to": "apps/console/.next/standalone",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../console/.next/static",
+        "to": "apps/console/.next/static",
+        "filter": [
+          "**/*"
         ]
       },
       {

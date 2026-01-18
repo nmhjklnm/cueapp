@@ -100,31 +100,48 @@ function getNextBin(consoleRoot: string): string {
   return path.join(consoleRoot, "node_modules", "next", "dist", "bin", "next");
 }
 
+function getStandaloneServer(consoleRoot: string): string {
+  const root = path.join(consoleRoot, ".next", "standalone");
+  const direct = path.join(root, "server.js");
+  if (fs.existsSync(direct)) return direct;
+  const nested = path.join(root, "apps", "console", "server.js");
+  return nested;
+}
+
 async function startNextServer(port: number): Promise<{ port: number; proc: ChildProcessWithoutNullStreams }> {
   const consoleRoot = getConsoleRoot();
-  const nextBin = getNextBin(consoleRoot);
 
-  if (!fs.existsSync(nextBin)) {
-    throw new Error(`Unable to resolve Next.js CLI at ${nextBin}. Did you run pnpm install?`);
+  const args: string[] = [];
+
+  if (app.isPackaged) {
+    const serverJs = getStandaloneServer(consoleRoot);
+    if (!fs.existsSync(serverJs)) {
+      throw new Error(`Unable to resolve Next standalone server at ${serverJs}. Did you run next build with output: \"standalone\"?`);
+    }
+    args.push(serverJs);
+  } else {
+    const nextBin = getNextBin(consoleRoot);
+    if (!fs.existsSync(nextBin)) {
+      throw new Error(`Unable to resolve Next.js CLI at ${nextBin}. Did you run pnpm install?`);
+    }
+    args.push(
+      nextBin,
+      "dev",
+      "--port",
+      String(port),
+      "--hostname",
+      HOST
+    );
   }
 
-  const cmd = app.isPackaged ? "start" : "dev";
-  const args: string[] = [
-    nextBin,
-    cmd,
-    "--port",
-    String(port),
-    "--hostname",
-    HOST,
-  ];
-
   const proc = spawn(process.execPath, args, {
-    cwd: consoleRoot,
+    cwd: app.isPackaged ? path.dirname(args[0] ?? path.join(consoleRoot, ".next", "standalone")) : consoleRoot,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       PORT: String(port),
       HOSTNAME: HOST,
+      NODE_ENV: app.isPackaged ? "production" : process.env.NODE_ENV,
       // Make Next logs deterministic in desktop app
       FORCE_COLOR: "0",
     },

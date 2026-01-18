@@ -4,6 +4,7 @@ node_modules
 .env
 .env.*
 dist
+apps/desktop/dist_electron
 build
 out
 .next
