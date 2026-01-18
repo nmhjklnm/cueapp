@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
-import { Menu, Notification, Tray, dialog, nativeImage } from "electron";
+import { Menu, Notification, Tray, dialog, nativeImage, shell } from "electron";
 
 import { getCliDiagnostics, installCliIntegration, uninstallCliIntegration } from "./cli-integration.js";
 
@@ -316,6 +316,18 @@ function setupNotifications(getMainWindow: () => BrowserWindow | null) {
           body: `New pending request (${pendingCount})`,
           silent: false,
         });
+
+        // Audible/system attention cues (best-effort)
+        try {
+          shell.beep();
+        } catch {
+          // ignore
+        }
+        try {
+          if (process.platform === "darwin" && app.dock) app.dock.bounce("informational");
+        } catch {
+          // ignore
+        }
 
         notif.on("click", () => {
           const w = getMainWindow();
