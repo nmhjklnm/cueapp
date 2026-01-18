@@ -1,0 +1,19 @@
+{
+  "name": "cueapp",
+  "private": true,
+  "packageManager": "pnpm@9.1.4",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm -C apps/desktop dev",
+    "postinstall": "pnpm -w exec electron-rebuild -w better-sqlite3",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.2"
+  }
+}

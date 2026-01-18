@@ -1,0 +1,29 @@
+{
+  "name": "cueme",
+  "version": "0.1.13",
+  "description": "Cue command protocol adapter (stdin/stdout JSON)",
+  "license": "Apache-2.0",
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "protocol.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "cueme": "bin/cue-command.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepare": "node -c src/cli.js && node -c src/handler.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.0",
+    "chardet": "^2.1.1",
+    "iconv-lite": "^0.7.2"
+  }
+}
