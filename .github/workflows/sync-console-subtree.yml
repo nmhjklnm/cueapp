@@ -1,0 +1,56 @@
+name: Sync cue-console (subtree)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "cueapp-sync"
+          git config user.email "cueapp-sync@users.noreply.github.com"
+
+      - name: Sync subtree from cue-console
+        run: |
+          set -euo pipefail
+          git remote add cue-console https://github.com/nmhjklnm/cue-console.git || true
+          git fetch cue-console main
+          git subtree pull --prefix apps/console cue-console main --squash
+
+      - name: Apply cueapp patch for console
+        run: node scripts/patch-console-next-config.mjs
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No changes after sync."
+            exit 0
+          fi
+
+          branch="sync/console-$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "chore: sync apps/console from cue-console"
+          git push -u origin "$branch"
+
+          gh pr create \
+            --title "chore: sync cue-console" \
+            --body "Automated subtree sync from nmhjklnm/cue-console (main)." \
+            --base main \
+            --head "$branch" \
+            || true
