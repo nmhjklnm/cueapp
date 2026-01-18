@@ -1,0 +1,46 @@
+name: Build macOS (electron-builder)
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.4
+
+      - name: Install
+        run: pnpm install
+
+      - name: Build console
+        run: pnpm build:console
+
+      - name: Build desktop
+        run: pnpm build:desktop
+
+      - name: Package macOS
+        run: pnpm dist:mac
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cueapp-macos
+          path: apps/desktop/dist_electron/**/*.zip
+          if-no-files-found: error

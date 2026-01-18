@@ -90,6 +90,9 @@ function getRepoRoot(): string {
 }
 
 function getConsoleRoot(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "apps", "console");
+  }
   return path.join(getRepoRoot(), "apps", "console");
 }
 
