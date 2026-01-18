@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const MARKER_BEGIN = "# >>> cuemeapp cli (managed) >>>";
 const MARKER_END = "# <<< cuemeapp cli (managed) <<<";
@@ -23,6 +24,35 @@ function writeFileAtomic(p: string, content: string) {
   const tmp = p + ".tmp";
   fs.writeFileSync(tmp, content, "utf8");
   fs.renameSync(tmp, p);
+}
+
+function validateZshProfileFile(p: string): boolean {
+  const res = spawnSync("zsh", ["-n", p], { stdio: "ignore" });
+  return res.status === 0;
+}
+
+function writeProfileSafely(profilePath: string, nextContent: string): void {
+  const dir = path.dirname(profilePath);
+  ensureDir(dir);
+
+  const tmp = profilePath + ".cueapp.tmp";
+  fs.writeFileSync(tmp, nextContent, "utf8");
+
+  if (!validateZshProfileFile(tmp)) {
+    fs.rmSync(tmp, { force: true });
+    return;
+  }
+
+  // Backup once per write
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const bak = profilePath + `.bak.${stamp}`;
+    if (fs.existsSync(profilePath)) fs.copyFileSync(profilePath, bak);
+  } catch {
+    // ignore
+  }
+
+  fs.renameSync(tmp, profilePath);
 }
 
 export function getShimDir(): string {
@@ -121,13 +151,14 @@ export function installCliIntegration(args: {
       `\n${MARKER_BEGIN}\n` +
       `# Added by cueapp to enable cueme in PATH.\n` +
       `if [ -d \"$HOME/.local/bin\" ]; then\n` +
-      `  case \":$PATH:\\" in\n` +
-      `    *\\\":$HOME/.local/bin:\\"*) :;;\n` +
+      `  case \":$PATH:\" in\n` +
+      `    *\":$HOME/.local/bin:\"*) :;;\n` +
       `    *) export PATH=\"$HOME/.local/bin:$PATH\";;\n` +
       `  esac\n` +
       `fi\n` +
       `${MARKER_END}\n`;
 
-    fs.appendFileSync(profilePath, block, "utf8");
+    const nextProfile = existing + block;
+    writeProfileSafely(profilePath, nextProfile);
   }
 }
