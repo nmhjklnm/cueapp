@@ -442,9 +442,11 @@
           const baseHref = window.location.href.endsWith("/")
             ? window.location.href
             : window.location.href + "/";
-          const releaseJsonUrl = new URL("release.json", baseHref).toString();
+          const releaseJsonUrl = new URL("release.json", baseHref);
+          // Bust GitHub Pages CDN caching for JSON after redeploy.
+          releaseJsonUrl.searchParams.set("t", String(Date.now()));
 
-          let data = await fetchJson(releaseJsonUrl, { cache: "no-store" });
+          let data = await fetchJson(releaseJsonUrl.toString(), { cache: "no-store" });
           if (!data) {
             data = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
               headers: { Accept: "application/vnd.github+json" },
