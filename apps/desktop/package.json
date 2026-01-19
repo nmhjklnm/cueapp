@@ -49,13 +49,6 @@
         ]
       },
       {
-        "from": "../console/public",
-        "to": "apps/console/public",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
         "from": "../console/.next/standalone",
         "to": "apps/console/.next/standalone",
         "filter": [
