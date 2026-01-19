@@ -56,14 +56,20 @@ function writeProfileSafely(profilePath: string, nextContent: string): void {
 }
 
 export function getShimDir(): string {
+  if (process.platform === "win32") {
+    const localAppData =
+      String(process.env.LOCALAPPDATA || "") || path.join(os.homedir(), "AppData", "Local");
+    return path.join(localAppData, "Microsoft", "WindowsApps");
+  }
   return path.join(os.homedir(), ".local", "bin");
 }
 
 export function getShimPath(): string {
-  return path.join(getShimDir(), "cueme");
+  return path.join(getShimDir(), process.platform === "win32" ? "cueme.cmd" : "cueme");
 }
 
 export function getProfilePath(): string {
+  if (process.platform === "win32") return "";
   return path.join(os.homedir(), ".zprofile");
 }
 
@@ -90,12 +96,13 @@ export function getCliDiagnostics(): {
 } {
   const shimPath = getShimPath();
   const profilePath = getProfilePath();
-  const profile = readFileSafe(profilePath);
+  const profile = profilePath ? readFileSafe(profilePath) : "";
   return {
     shimPath,
     shimExists: fs.existsSync(shimPath),
     profilePath,
-    profileHasMarker: profile.includes(MARKER_BEGIN) && profile.includes(MARKER_END),
+    profileHasMarker:
+      process.platform === "win32" ? true : profile.includes(MARKER_BEGIN) && profile.includes(MARKER_END),
   };
 }
 
@@ -116,6 +123,8 @@ export function uninstallCliIntegration(): void {
     // ignore
   }
 
+  if (process.platform === "win32") return;
+
   const profilePath = getProfilePath();
   const existing = readFileSafe(profilePath);
   if (existing) {
@@ -135,14 +144,24 @@ export function installCliIntegration(args: {
   ensureDir(shimDir);
 
   const cliEntry = getCliEntryPath(args);
-  const shim = `#!/bin/sh\n` +
-    `export ELECTRON_RUN_AS_NODE=1\n` +
-    `exec \"${args.appExecPath}\" \"${cliEntry}\" \"$@\"\n`;
-
-  writeFileAtomic(getShimPath(), shim);
-  fs.chmodSync(getShimPath(), 0o755);
+  if (process.platform === "win32") {
+    const shim =
+      `@echo off\r\n` +
+      `set ELECTRON_RUN_AS_NODE=1\r\n` +
+      `"${args.appExecPath}" "${cliEntry}" %*\r\n`;
+    writeFileAtomic(getShimPath(), shim);
+  } else {
+    const shim =
+      `#!/bin/sh\n` +
+      `export ELECTRON_RUN_AS_NODE=1\n` +
+      `exec \"${args.appExecPath}\" \"${cliEntry}\" \"$@\"\n`;
+    writeFileAtomic(getShimPath(), shim);
+    fs.chmodSync(getShimPath(), 0o755);
+  }
 
   // 2) ~/.zprofile PATH block
+  if (process.platform === "win32") return;
+
   const profilePath = getProfilePath();
   const existing = readFileSafe(profilePath);
 

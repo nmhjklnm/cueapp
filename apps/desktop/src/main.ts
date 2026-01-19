@@ -246,14 +246,18 @@ function setupTray(getMainWindow: () => BrowserWindow | null): Tray | null {
     {
       label: "Install CLI (cueme)",
       click: async () => {
+        const d = getCliDiagnostics();
+        const installDetail =
+          process.platform === "win32"
+            ? `This will create ${d.shimPath}.\n\nWindowsApps is typically already in PATH, so new terminals should have \`cueme\` available.\n\nNo shell profile files will be modified.`
+            : "This will create ~/.local/bin/cueme and append a managed PATH block to ~/.zprofile (marker: cuemeapp).\n\nNew terminals will have `cueme` available. You can uninstall from this menu.";
         const res = await dialog.showMessageBox({
           type: "question",
           buttons: ["Install", "Cancel"],
           defaultId: 0,
           cancelId: 1,
           message: "Install cueme CLI integration?",
-          detail:
-            "This will create ~/.local/bin/cueme and append a managed PATH block to ~/.zprofile (marker: cuemeapp).\n\nNew terminals will have `cueme` available. You can uninstall from this menu.",
+          detail: installDetail,
         });
         if (res.response !== 0) return;
 
@@ -268,13 +272,18 @@ function setupTray(getMainWindow: () => BrowserWindow | null): Tray | null {
     {
       label: "Uninstall CLI integration",
       click: async () => {
+        const d = getCliDiagnostics();
+        const uninstallDetail =
+          process.platform === "win32"
+            ? `This will remove ${d.shimPath}.`
+            : "This will remove ~/.local/bin/cueme and remove the managed PATH block from ~/.zprofile.";
         const res = await dialog.showMessageBox({
           type: "warning",
           buttons: ["Uninstall", "Cancel"],
           defaultId: 1,
           cancelId: 1,
           message: "Uninstall cueme CLI integration?",
-          detail: "This will remove ~/.local/bin/cueme and remove the managed PATH block from ~/.zprofile.",
+          detail: uninstallDetail,
         });
         if (res.response !== 0) return;
         uninstallCliIntegration();
