@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>cueapp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100">
+    <div class="mx-auto max-w-5xl px-6 py-12">
+      <div class="flex items-center justify-between gap-6">
+        <div>
+          <h1 class="text-4xl font-semibold tracking-tight">cueapp</h1>
+          <p class="mt-3 text-slate-300">桌面端（macOS 优先），集成 cue-console + cueme 的本地协作收件箱。</p>
+        </div>
+        <div class="hidden sm:block">
+          <div class="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+            <div class="text-sm text-slate-400">Latest</div>
+            <div id="latestTag" class="text-xl font-semibold">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-10 grid gap-6 md:grid-cols-3">
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/30 p-6 md:col-span-2">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div class="text-sm text-slate-400">macOS 下载</div>
+              <div class="mt-1 text-lg font-semibold" id="downloadTitle">正在获取最新版本…</div>
+            </div>
+            <a
+              id="downloadBtn"
+              href="#"
+              class="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-200 disabled:pointer-events-none disabled:opacity-50"
+              aria-disabled="true"
+              >下载 zip</a
+            >
+          </div>
+
+          <div class="mt-4 text-sm text-slate-400" id="publishedAt"></div>
+
+          <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div class="text-sm font-semibold text-slate-200">Changelog</div>
+            <div id="releaseNotes" class="prose prose-invert mt-3 max-w-none prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800"></div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
+          <div class="text-sm font-semibold text-slate-200">链接</div>
+          <div class="mt-4 space-y-3 text-sm">
+            <a class="block text-slate-300 hover:text-white" href="https://github.com/nmhjklnm/cueapp" target="_blank" rel="noreferrer">GitHub 仓库</a>
+            <a class="block text-slate-300 hover:text-white" href="https://github.com/nmhjklnm/cueapp/releases" target="_blank" rel="noreferrer">所有 Releases</a>
+          </div>
+
+          <div class="mt-8 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+            <div class="text-sm font-semibold text-slate-200">提示</div>
+            <div class="mt-2 text-sm text-slate-300">如果下载按钮不可用，说明最新 Release 还在构建或未包含 zip 资产。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-12 text-xs text-slate-500">
+        <span>© </span><span id="year"></span><span> cueapp</span>
+      </div>
+    </div>
+
+    <script>
+      const owner = "nmhjklnm";
+      const repo = "cueapp";
+
+      const latestTagEl = document.getElementById("latestTag");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const downloadTitle = document.getElementById("downloadTitle");
+      const publishedAtEl = document.getElementById("publishedAt");
+      const releaseNotesEl = document.getElementById("releaseNotes");
+
+      document.getElementById("year").textContent = String(new Date().getFullYear());
+
+      function setDisabledDownload(reason) {
+        downloadTitle.textContent = reason;
+        downloadBtn.setAttribute("aria-disabled", "true");
+        downloadBtn.classList.add("pointer-events-none", "opacity-50");
+        downloadBtn.href = "#";
+      }
+
+      function enableDownload(url) {
+        downloadBtn.removeAttribute("aria-disabled");
+        downloadBtn.classList.remove("pointer-events-none", "opacity-50");
+        downloadBtn.href = url;
+      }
+
+      async function loadLatestRelease() {
+        setDisabledDownload("正在获取最新版本…");
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+          headers: {
+            Accept: "application/vnd.github+json",
+          },
+        });
+
+        if (!res.ok) {
+          setDisabledDownload("获取 Release 失败");
+          latestTagEl.textContent = "—";
+          releaseNotesEl.textContent = "";
+          return;
+        }
+
+        const data = await res.json();
+        const tag = data && data.tag_name ? String(data.tag_name) : "—";
+        latestTagEl.textContent = tag;
+
+        const publishedAt = data && data.published_at ? new Date(data.published_at) : null;
+        publishedAtEl.textContent = publishedAt ? `发布时间：${publishedAt.toLocaleString()}` : "";
+
+        const body = data && typeof data.body === "string" ? data.body : "";
+        releaseNotesEl.innerHTML = marked.parse(body);
+
+        const assets = Array.isArray(data.assets) ? data.assets : [];
+        const zip = assets.find((a) => a && typeof a.name === "string" && a.name.endsWith(".zip") && typeof a.browser_download_url === "string");
+
+        if (!zip) {
+          setDisabledDownload("最新 Release 暂无 zip 资产");
+          return;
+        }
+
+        downloadTitle.textContent = `下载 ${tag}`;
+        enableDownload(zip.browser_download_url);
+      }
+
+      loadLatestRelease().catch(() => {
+        setDisabledDownload("获取 Release 失败");
+        latestTagEl.textContent = "—";
+      });
+    </script>
+  </body>
+</html>
