@@ -439,7 +439,12 @@
             }
           };
 
-          let data = await fetchJson("./release.json", { cache: "no-store" });
+          const baseHref = window.location.href.endsWith("/")
+            ? window.location.href
+            : window.location.href + "/";
+          const releaseJsonUrl = new URL("release.json", baseHref).toString();
+
+          let data = await fetchJson(releaseJsonUrl, { cache: "no-store" });
           if (!data) {
             data = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
               headers: { Accept: "application/vnd.github+json" },
