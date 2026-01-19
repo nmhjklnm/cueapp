@@ -1,6 +1,6 @@
 {
   "name": "@cueapp/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -10,6 +10,10 @@
     "build": "tsc -p tsconfig.json",
     "pack:mac": "pnpm build && electron-builder --mac --dir",
     "dist:mac": "pnpm build && electron-builder --mac",
+    "pack:win": "pnpm build && electron-builder --win --dir",
+    "dist:win": "pnpm build && electron-builder --win",
+    "pack:linux": "pnpm build && electron-builder --linux --dir",
+    "dist:linux": "pnpm build && electron-builder --linux",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -73,9 +77,26 @@
       }
     ],
     "mac": {
+      "artifactName": "cueapp-${version}-${arch}-mac.${ext}",
       "target": [
         {
           "target": "zip"
+        }
+      ]
+    },
+    "win": {
+      "artifactName": "cueapp-${version}-${arch}-win.${ext}",
+      "target": [
+        {
+          "target": "nsis"
+        }
+      ]
+    },
+    "linux": {
+      "artifactName": "cueapp-${version}-${arch}-linux.${ext}",
+      "target": [
+        {
+          "target": "AppImage"
         }
       ]
     }

@@ -1,0 +1,51 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.4
+
+      - name: Install
+        run: pnpm install
+
+      - name: Build console
+        run: pnpm build:console
+
+      - name: Build desktop
+        run: pnpm build:desktop
+
+      - name: Package Linux
+        run: pnpm dist:linux
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/dist_electron/**/*.AppImage
+            apps/desktop/dist_electron/**/*.deb
+            apps/desktop/dist_electron/**/*.rpm
+            apps/desktop/dist_electron/**/*.tar.gz
+            apps/desktop/dist_electron/**/*.tgz
+            apps/desktop/dist_electron/**/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: false

@@ -13,6 +13,8 @@
     "build:console": "pnpm -C apps/console build && node scripts/prepare-console-standalone.mjs",
     "build:desktop": "pnpm -C apps/desktop build",
     "dist:mac": "pnpm build:console && pnpm build:desktop && pnpm -C apps/desktop dist:mac",
+    "dist:win": "pnpm build:console && pnpm build:desktop && pnpm -C apps/desktop dist:win",
+    "dist:linux": "pnpm build:console && pnpm build:desktop && pnpm -C apps/desktop dist:linux",
     "postinstall": "pnpm -w exec electron-rebuild -w better-sqlite3",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
