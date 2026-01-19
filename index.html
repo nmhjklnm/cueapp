@@ -3,65 +3,290 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>cueapp</title>
+    <title>cueapp · Releases</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=IBM+Plex+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+      :root {
+        --bg0: #070a10;
+        --bg1: #0b1220;
+        --panel: rgba(14, 23, 40, 0.72);
+        --panel2: rgba(10, 14, 22, 0.6);
+        --line: rgba(148, 163, 184, 0.18);
+        --muted: rgba(226, 232, 240, 0.64);
+        --text: rgba(248, 250, 252, 0.92);
+        --accent: #ffd24a;
+        --accent2: #7dd3fc;
+        --danger: #fb7185;
+        --shadow: 0 40px 120px rgba(0, 0, 0, 0.55);
+        --shadow2: 0 18px 60px rgba(0, 0, 0, 0.45);
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        background: radial-gradient(1200px 800px at 18% 12%, rgba(125, 211, 252, 0.12), transparent 60%),
+          radial-gradient(900px 650px at 80% 18%, rgba(255, 210, 74, 0.12), transparent 60%),
+          radial-gradient(900px 700px at 40% 90%, rgba(251, 113, 133, 0.08), transparent 60%),
+          linear-gradient(180deg, var(--bg0), var(--bg1));
+        color: var(--text);
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+      }
+
+      .display {
+        font-family: "Fraunces", ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+        letter-spacing: -0.02em;
+      }
+
+      .grain {
+        pointer-events: none;
+        position: fixed;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='210' height='210'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='210' height='210' filter='url(%23n)' opacity='.23'/%3E%3C/svg%3E");
+        mix-blend-mode: overlay;
+        opacity: 0.35;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow2);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+
+      .panel-soft {
+        background: var(--panel2);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .tab {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.02);
+        color: rgba(226, 232, 240, 0.78);
+        transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+      .tab:hover {
+        transform: translateY(-1px);
+        border-color: rgba(255, 255, 255, 0.18);
+        color: rgba(248, 250, 252, 0.92);
+      }
+      .tab[aria-selected="true"] {
+        background: rgba(255, 210, 74, 0.12);
+        border-color: rgba(255, 210, 74, 0.32);
+        color: rgba(255, 210, 74, 0.95);
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(226, 232, 240, 0.78);
+      }
+
+      .primary {
+        background: linear-gradient(135deg, rgba(255, 210, 74, 0.95), rgba(125, 211, 252, 0.85));
+        color: rgba(2, 6, 23, 0.92);
+        box-shadow: 0 18px 65px rgba(255, 210, 74, 0.12), 0 18px 65px rgba(125, 211, 252, 0.09);
+        transition: transform 160ms ease, filter 160ms ease;
+      }
+      .primary:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.02);
+      }
+      .primary[aria-disabled="true"] {
+        filter: grayscale(0.2) brightness(0.65);
+        opacity: 0.7;
+        pointer-events: none;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .kbd {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(0, 0, 0, 0.25);
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        color: rgba(226, 232, 240, 0.82);
+      }
+
+      .prose {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+          "Apple Color Emoji", "Segoe UI Emoji";
+      }
+    </style>
   </head>
-  <body class="bg-slate-950 text-slate-100">
-    <div class="mx-auto max-w-5xl px-6 py-12">
-      <div class="flex items-center justify-between gap-6">
-        <div>
-          <h1 class="text-4xl font-semibold tracking-tight">cueapp</h1>
-          <p class="mt-3 text-slate-300">桌面端（macOS 优先），集成 cue-console + cueme 的本地协作收件箱。</p>
-        </div>
-        <div class="hidden sm:block">
-          <div class="rounded-2xl border border-slate-800 bg-slate-900/40 px-4 py-3">
-            <div class="text-sm text-slate-400">Latest</div>
-            <div id="latestTag" class="text-xl font-semibold">Loading…</div>
-          </div>
-        </div>
-      </div>
+  <body>
+    <div class="grain"></div>
 
-      <div class="mt-10 grid gap-6 md:grid-cols-3">
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/30 p-6 md:col-span-2">
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div class="text-sm text-slate-400">macOS 下载</div>
-              <div class="mt-1 text-lg font-semibold" id="downloadTitle">正在获取最新版本…</div>
+    <div class="mx-auto max-w-6xl px-6 py-12">
+      <div class="flex flex-col gap-8">
+        <header class="panel-soft rounded-[28px] px-7 py-7 sm:px-10 sm:py-9">
+          <div class="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+            <div class="max-w-2xl">
+              <div class="inline-flex items-center gap-3">
+                <div
+                  class="h-11 w-11 rounded-2xl border"
+                  style="
+                    border-color: rgba(255, 255, 255, 0.14);
+                    background: linear-gradient(135deg, rgba(255, 210, 74, 0.25), rgba(125, 211, 252, 0.18));
+                  "
+                ></div>
+                <div class="text-xs pill rounded-full px-3 py-1.5">releases</div>
+                <div class="text-xs pill rounded-full px-3 py-1.5">desktop</div>
+              </div>
+
+              <h1 class="display mt-5 text-4xl sm:text-5xl">
+                cueapp
+                <span class="muted">·</span>
+                <span class="muted">发布页</span>
+              </h1>
+              <p class="mt-4 muted leading-relaxed">
+                借助 cue-stack 的能力将任意 agent link 在一起，而 cueapp 则是 agent 的聚合地：
+                你可以在这里统御你的千军万马。
+              </p>
+              <p class="mt-3 muted leading-relaxed">
+                这个页面用于展示桌面端最新版本、三端下载与变更记录。
+              </p>
+              <div class="mt-5 flex flex-wrap items-center gap-3">
+                <span class="kbd">Win</span>
+                <span class="kbd">Mac</span>
+                <span class="kbd">Linux</span>
+                <span class="muted text-xs">没有对应平台资产时会显示“暂未发布”。</span>
+              </div>
             </div>
-            <a
-              id="downloadBtn"
-              href="#"
-              class="inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-200 disabled:pointer-events-none disabled:opacity-50"
-              aria-disabled="true"
-              >下载 zip</a
-            >
+
+            <div class="panel rounded-[22px] px-5 py-4">
+              <div class="text-xs muted">Latest</div>
+              <div id="latestTag" class="display mt-1 text-2xl">Loading…</div>
+              <div class="mt-2 text-xs muted" id="publishedAt"></div>
+            </div>
           </div>
+        </header>
 
-          <div class="mt-4 text-sm text-slate-400" id="publishedAt"></div>
+        <main class="grid gap-7 lg:grid-cols-12">
+          <section class="lg:col-span-7">
+            <div class="panel rounded-[28px] p-6 sm:p-7">
+              <div class="flex flex-col gap-5">
+                <div class="flex flex-col gap-3">
+                  <div class="text-xs muted">平台</div>
+                  <div class="flex flex-wrap gap-2" role="tablist" aria-label="Platforms">
+                    <button class="tab rounded-2xl px-4 py-2 text-sm" role="tab" id="tab-mac" aria-selected="true">
+                      macOS
+                    </button>
+                    <button class="tab rounded-2xl px-4 py-2 text-sm" role="tab" id="tab-win" aria-selected="false">
+                      Windows
+                    </button>
+                    <button class="tab rounded-2xl px-4 py-2 text-sm" role="tab" id="tab-linux" aria-selected="false">
+                      Linux
+                    </button>
+                  </div>
+                </div>
 
-          <div class="mt-6 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-            <div class="text-sm font-semibold text-slate-200">Changelog</div>
-            <div id="releaseNotes" class="prose prose-invert mt-3 max-w-none prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800"></div>
-          </div>
-        </div>
+                <div class="panel-soft rounded-[22px] p-5">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div class="text-xs muted" id="platformHint">macOS 下载</div>
+                      <div class="display mt-1 text-2xl" id="downloadTitle">正在获取最新版本…</div>
+                      <div class="mt-2 text-sm muted" id="downloadMeta"></div>
+                    </div>
+                    <a
+                      id="downloadBtn"
+                      href="#"
+                      class="primary inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold"
+                      aria-disabled="true"
+                      >下载</a
+                    >
+                  </div>
+                </div>
 
-        <div class="rounded-2xl border border-slate-800 bg-slate-900/30 p-6">
-          <div class="text-sm font-semibold text-slate-200">链接</div>
-          <div class="mt-4 space-y-3 text-sm">
-            <a class="block text-slate-300 hover:text-white" href="https://github.com/nmhjklnm/cueapp" target="_blank" rel="noreferrer">GitHub 仓库</a>
-            <a class="block text-slate-300 hover:text-white" href="https://github.com/nmhjklnm/cueapp/releases" target="_blank" rel="noreferrer">所有 Releases</a>
-          </div>
+                <div class="panel-soft rounded-[22px] p-5">
+                  <div class="flex items-center justify-between gap-3">
+                    <div class="text-xs muted">Changelog</div>
+                    <a
+                      class="text-xs underline decoration-white/20 underline-offset-4 hover:decoration-white/60"
+                      id="releasesLink"
+                      href="#"
+                      target="_blank"
+                      rel="noreferrer"
+                      >view all</a
+                    >
+                  </div>
+                  <div
+                    id="releaseNotes"
+                    class="prose prose-invert mt-4 max-w-none prose-pre:bg-black/30 prose-pre:border prose-pre:border-white/10 prose-code:text-[0.9em]"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </section>
 
-          <div class="mt-8 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-            <div class="text-sm font-semibold text-slate-200">提示</div>
-            <div class="mt-2 text-sm text-slate-300">如果下载按钮不可用，说明最新 Release 还在构建或未包含 zip 资产。</div>
-          </div>
-        </div>
-      </div>
+          <aside class="lg:col-span-5">
+            <div class="panel rounded-[28px] p-6 sm:p-7">
+              <div class="text-xs muted">Links</div>
+              <div class="mt-5 grid gap-3">
+                <a
+                  id="repoLink"
+                  class="panel-soft rounded-2xl px-4 py-3 text-sm hover:brightness-110"
+                  href="#"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <div class="text-xs muted">cueapp</div>
+                  <div class="mt-1">GitHub 仓库 / Releases</div>
+                </a>
 
-      <div class="mt-12 text-xs text-slate-500">
-        <span>© </span><span id="year"></span><span> cueapp</span>
+                <a
+                  id="cueStackLink"
+                  class="panel-soft rounded-2xl px-4 py-3 text-sm hover:brightness-110"
+                  href="https://github.com/nmhjklnm/cue-stack"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <div class="text-xs muted">cue-stack</div>
+                  <div class="mt-1">去点个 star：让更多人看到这套协作协议</div>
+                </a>
+
+                <div class="panel-soft rounded-2xl px-4 py-3 text-sm">
+                  <div class="text-xs muted">Status</div>
+                  <div class="mt-2 text-sm" id="statusLine">Loading…</div>
+                  <div class="mt-2 text-xs muted">
+                    页面优先读取站内的 <span class="kbd">release.json</span>，避免浏览器直连 GitHub API 被限流。
+                  </div>
+                </div>
+
+                <div class="panel-soft rounded-2xl px-4 py-3 text-sm">
+                  <div class="text-xs muted">Asset matching</div>
+                  <div class="mt-2 space-y-1 text-xs muted">
+                    <div><span class="kbd">macOS</span> .dmg / .zip</div>
+                    <div><span class="kbd">Windows</span> .exe / .msi</div>
+                    <div><span class="kbd">Linux</span> .AppImage / .deb / .rpm / .tar.gz</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-8 text-xs muted">© <span id="year"></span> cueapp</div>
+            </div>
+          </aside>
+        </main>
       </div>
     </div>
 
@@ -70,67 +295,194 @@
       const repo = "cueapp";
 
       const latestTagEl = document.getElementById("latestTag");
-      const downloadBtn = document.getElementById("downloadBtn");
-      const downloadTitle = document.getElementById("downloadTitle");
       const publishedAtEl = document.getElementById("publishedAt");
       const releaseNotesEl = document.getElementById("releaseNotes");
+      const repoLink = document.getElementById("repoLink");
+      const releasesLink = document.getElementById("releasesLink");
 
+      const downloadBtn = document.getElementById("downloadBtn");
+      const downloadTitle = document.getElementById("downloadTitle");
+      const downloadMeta = document.getElementById("downloadMeta");
+      const platformHint = document.getElementById("platformHint");
+      const statusLine = document.getElementById("statusLine");
+
+      const tabMac = document.getElementById("tab-mac");
+      const tabWin = document.getElementById("tab-win");
+      const tabLinux = document.getElementById("tab-linux");
+
+      repoLink.href = `https://github.com/${owner}/${repo}`;
+      releasesLink.href = `https://github.com/${owner}/${repo}/releases`;
       document.getElementById("year").textContent = String(new Date().getFullYear());
 
-      function setDisabledDownload(reason) {
-        downloadTitle.textContent = reason;
-        downloadBtn.setAttribute("aria-disabled", "true");
-        downloadBtn.classList.add("pointer-events-none", "opacity-50");
-        downloadBtn.href = "#";
+      const state = {
+        platform: "mac",
+        release: null,
+        assets: [],
+        tag: "—",
+        ok: false,
+      };
+
+      function setSelected(platform) {
+        state.platform = platform;
+        tabMac.setAttribute("aria-selected", platform === "mac" ? "true" : "false");
+        tabWin.setAttribute("aria-selected", platform === "win" ? "true" : "false");
+        tabLinux.setAttribute("aria-selected", platform === "linux" ? "true" : "false");
+        renderDownload();
       }
 
-      function enableDownload(url) {
+      tabMac.addEventListener("click", () => setSelected("mac"));
+      tabWin.addEventListener("click", () => setSelected("win"));
+      tabLinux.addEventListener("click", () => setSelected("linux"));
+
+      function disableDownload(text, meta) {
+        downloadBtn.setAttribute("aria-disabled", "true");
+        downloadBtn.href = "#";
+        downloadBtn.textContent = "暂未发布";
+        downloadTitle.textContent = text;
+        downloadMeta.textContent = meta || "";
+      }
+
+      function enableDownload(url, label, title, meta) {
         downloadBtn.removeAttribute("aria-disabled");
-        downloadBtn.classList.remove("pointer-events-none", "opacity-50");
         downloadBtn.href = url;
+        downloadBtn.textContent = label;
+        downloadTitle.textContent = title;
+        downloadMeta.textContent = meta || "";
+      }
+
+      function isStr(x) {
+        return typeof x === "string" && x.length > 0;
+      }
+
+      function pickAsset(assets, platform) {
+        const list = Array.isArray(assets) ? assets : [];
+
+        const byExt = (exts) =>
+          list.find((a) =>
+            a && isStr(a.name) && isStr(a.browser_download_url)
+              ? exts.some((e) => String(a.name).toLowerCase().endsWith(e))
+              : false
+          );
+
+        const byNameIncludes = (parts, exts) =>
+          list.find((a) => {
+            if (!a || !isStr(a.name) || !isStr(a.browser_download_url)) return false;
+            const n = String(a.name).toLowerCase();
+            const okParts = parts.some((p) => n.includes(p));
+            const okExt = exts.some((e) => n.endsWith(e));
+            return okParts && okExt;
+          });
+
+        if (platform === "mac") {
+          return (
+            byNameIncludes(["mac", "darwin", "osx"], [".dmg", ".zip"]) ||
+            byExt([".dmg", ".zip"]) ||
+            null
+          );
+        }
+        if (platform === "win") {
+          return (
+            byNameIncludes(["win", "windows"], [".exe", ".msi"]) ||
+            byExt([".exe", ".msi"]) ||
+            null
+          );
+        }
+        if (platform === "linux") {
+          return (
+            byNameIncludes(["linux"], [".appimage", ".deb", ".rpm", ".tar.gz", ".tgz"]) ||
+            byExt([".appimage", ".deb", ".rpm", ".tar.gz", ".tgz"]) ||
+            null
+          );
+        }
+        return null;
+      }
+
+      function humanPlatform(platform) {
+        if (platform === "mac") return "macOS";
+        if (platform === "win") return "Windows";
+        return "Linux";
+      }
+
+      function renderDownload() {
+        const plat = state.platform;
+        platformHint.textContent = `${humanPlatform(plat)} 下载`;
+
+        if (!state.ok) {
+          disableDownload("暂未发布", "无法获取 latest release");
+          statusLine.textContent = "Release: unavailable";
+          return;
+        }
+
+        const asset = pickAsset(state.assets, plat);
+        if (!asset) {
+          disableDownload("暂未发布", `未找到 ${humanPlatform(plat)} 资产（tag: ${state.tag})`);
+          statusLine.textContent = `Latest: ${state.tag} (no ${humanPlatform(plat)} asset)`;
+          return;
+        }
+
+        const name = String(asset.name || "");
+        const size = typeof asset.size === "number" ? `${Math.max(1, Math.round(asset.size / 1024 / 1024))} MB` : "";
+        const meta = [name, size].filter(Boolean).join(" · ");
+        enableDownload(String(asset.browser_download_url), "下载", `下载 ${state.tag}`, meta);
+        statusLine.textContent = `Latest: ${state.tag} (ready)`;
       }
 
       async function loadLatestRelease() {
-        setDisabledDownload("正在获取最新版本…");
-        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
-          headers: {
-            Accept: "application/vnd.github+json",
-          },
-        });
+        try {
+          const fetchJson = async (url, opts) => {
+            const r = await fetch(url, opts);
+            if (!r.ok) return null;
+            try {
+              return await r.json();
+            } catch {
+              return null;
+            }
+          };
 
-        if (!res.ok) {
-          setDisabledDownload("获取 Release 失败");
+          let data = await fetchJson("./release.json", { cache: "no-store" });
+          if (!data) {
+            data = await fetchJson(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+              headers: { Accept: "application/vnd.github+json" },
+            });
+          }
+
+          if (!data) {
+            state.ok = false;
+            state.tag = "—";
+            state.assets = [];
+            latestTagEl.textContent = "—";
+            publishedAtEl.textContent = "";
+            releaseNotesEl.textContent = "";
+            renderDownload();
+            return;
+          }
+
+          state.release = data;
+          state.ok = true;
+          state.tag = data && isStr(data.tag_name) ? String(data.tag_name) : "—";
+          state.assets = Array.isArray(data.assets) ? data.assets : [];
+
+          latestTagEl.textContent = state.tag;
+
+          const publishedAt = data && isStr(data.published_at) ? new Date(data.published_at) : null;
+          publishedAtEl.textContent = publishedAt ? publishedAt.toLocaleString() : "";
+
+          const body = data && typeof data.body === "string" ? data.body : "";
+          releaseNotesEl.innerHTML = marked.parse(body);
+          renderDownload();
+        } catch {
+          state.ok = false;
+          state.tag = "—";
+          state.assets = [];
           latestTagEl.textContent = "—";
+          publishedAtEl.textContent = "";
           releaseNotesEl.textContent = "";
-          return;
+          renderDownload();
         }
-
-        const data = await res.json();
-        const tag = data && data.tag_name ? String(data.tag_name) : "—";
-        latestTagEl.textContent = tag;
-
-        const publishedAt = data && data.published_at ? new Date(data.published_at) : null;
-        publishedAtEl.textContent = publishedAt ? `发布时间：${publishedAt.toLocaleString()}` : "";
-
-        const body = data && typeof data.body === "string" ? data.body : "";
-        releaseNotesEl.innerHTML = marked.parse(body);
-
-        const assets = Array.isArray(data.assets) ? data.assets : [];
-        const zip = assets.find((a) => a && typeof a.name === "string" && a.name.endsWith(".zip") && typeof a.browser_download_url === "string");
-
-        if (!zip) {
-          setDisabledDownload("最新 Release 暂无 zip 资产");
-          return;
-        }
-
-        downloadTitle.textContent = `下载 ${tag}`;
-        enableDownload(zip.browser_download_url);
       }
 
-      loadLatestRelease().catch(() => {
-        setDisabledDownload("获取 Release 失败");
-        latestTagEl.textContent = "—";
-      });
+      setSelected("mac");
+      loadLatestRelease();
     </script>
   </body>
 </html>
