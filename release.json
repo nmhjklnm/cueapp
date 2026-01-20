@@ -67,7 +67,7 @@
       "state": "uploaded",
       "size": 121167599,
       "digest": "sha256:06548096a61a5db18a55c730e3e9c71f773efd721c336180bef0400e760b723e",
-      "download_count": 0,
+      "download_count": 1,
       "created_at": "2026-01-19T10:27:19Z",
       "updated_at": "2026-01-19T10:27:24Z",
       "browser_download_url": "https://github.com/nmhjklnm/cueapp/releases/download/v0.1.4/cueapp-0.1.4-arm64-mac.zip"
@@ -211,7 +211,7 @@
       "state": "uploaded",
       "size": 107520,
       "digest": "sha256:9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37",
-      "download_count": 0,
+      "download_count": 1,
       "created_at": "2026-01-19T10:30:15Z",
       "updated_at": "2026-01-19T10:30:16Z",
       "browser_download_url": "https://github.com/nmhjklnm/cueapp/releases/download/v0.1.4/elevate.exe"
