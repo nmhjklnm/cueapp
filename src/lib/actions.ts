@@ -11,6 +11,8 @@ import {
   getAllAgents,
   getConversationMetaMap,
   getAgentDisplayNames,
+  getAgentEnv,
+  getAgentEnvMap,
   upsertAgentDisplayName,
   getAgentLastRequest,
   getPendingCountByAgent,
@@ -40,12 +42,16 @@ import {
   moveMessageQueueItem,
   acquireWorkerLease,
   processMessageQueueTick,
+  getAgentPendingRequests,
   getLastRequestsByAgents,
   getLastResponsesByAgents,
   getPendingCountsByAgents,
   pinConversation,
   unpinConversation,
   listPinnedConversations,
+  getBotEnabledConversation,
+  setBotEnabledConversation,
+  listBotEnabledConversations,
   type ConversationType,
   type CueResponse,
 } from "./db";
@@ -56,12 +62,15 @@ export type { Group, UserResponse, ImageContent, ConversationItem } from "./type
 export type { CueRequest, CueResponse, AgentTimelineItem } from "./db";
 import { v4 as uuidv4 } from "uuid";
 
-export type UserConfig = {
-  sound_enabled: boolean;
-  conversation_mode_default: "chat" | "agent";
-  chat_mode_append_text: string;
-  pending_request_timeout_ms: number;
-};
+import {
+  DEFAULT_USER_CONFIG,
+  clampNumber,
+  normalizeMultiline,
+  normalizeSingleLine,
+  type UserConfig,
+} from "./user-config";
+
+export type { UserConfig } from "./user-config";
 
 export type QueuedMessage = {
   id: string;
@@ -69,23 +78,6 @@ export type QueuedMessage = {
   images: { mime_type: string; base64_data: string; file_name?: string }[];
   createdAt: number;
 };
-
-const defaultUserConfig: UserConfig = {
-  sound_enabled: true,
-  conversation_mode_default: "agent",
-  chat_mode_append_text: "只做分析，不要对代码/文件做任何改动。",
-  pending_request_timeout_ms: 10 * 60 * 1000,
-};
-
-function clampNumber(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min;
-  return Math.max(min, Math.min(max, n));
-}
-
-function normalizeSingleLine(s: string): string {
-  const t = String(s ?? "").replace(/\r?\n/g, " ").trim();
-  return t;
-}
 
 function getUserConfigPath(): string {
   return path.join(os.homedir(), ".cue", "config.json");
@@ -100,24 +92,34 @@ export async function getUserConfig(): Promise<UserConfig> {
       sound_enabled:
         typeof parsed.sound_enabled === "boolean"
           ? parsed.sound_enabled
-          : defaultUserConfig.sound_enabled,
+          : DEFAULT_USER_CONFIG.sound_enabled,
       conversation_mode_default:
         parsed.conversation_mode_default === "chat" || parsed.conversation_mode_default === "agent"
           ? parsed.conversation_mode_default
-          : defaultUserConfig.conversation_mode_default,
+          : DEFAULT_USER_CONFIG.conversation_mode_default,
 
       chat_mode_append_text:
         typeof parsed.chat_mode_append_text === "string" && normalizeSingleLine(parsed.chat_mode_append_text).length > 0
           ? normalizeSingleLine(parsed.chat_mode_append_text)
-          : defaultUserConfig.chat_mode_append_text,
+          : DEFAULT_USER_CONFIG.chat_mode_append_text,
 
       pending_request_timeout_ms:
         typeof parsed.pending_request_timeout_ms === "number"
           ? clampNumber(parsed.pending_request_timeout_ms, 60_000, 86_400_000)
-          : defaultUserConfig.pending_request_timeout_ms,
+          : DEFAULT_USER_CONFIG.pending_request_timeout_ms,
+
+      bot_mode_enabled:
+        typeof parsed.bot_mode_enabled === "boolean"
+          ? parsed.bot_mode_enabled
+          : DEFAULT_USER_CONFIG.bot_mode_enabled,
+
+      bot_mode_reply_text:
+        typeof parsed.bot_mode_reply_text === "string" && normalizeMultiline(parsed.bot_mode_reply_text).length > 0
+          ? normalizeMultiline(parsed.bot_mode_reply_text)
+          : DEFAULT_USER_CONFIG.bot_mode_reply_text,
     };
   } catch {
-    return defaultUserConfig;
+    return DEFAULT_USER_CONFIG;
   }
 }
 
@@ -140,11 +142,65 @@ export async function setUserConfig(next: Partial<UserConfig>): Promise<UserConf
       typeof next.pending_request_timeout_ms === "number"
         ? clampNumber(next.pending_request_timeout_ms, 60_000, 86_400_000)
         : prev.pending_request_timeout_ms,
+
+    bot_mode_enabled:
+      typeof next.bot_mode_enabled === "boolean" ? next.bot_mode_enabled : prev.bot_mode_enabled,
+
+    bot_mode_reply_text:
+      typeof next.bot_mode_reply_text === "string" && normalizeMultiline(next.bot_mode_reply_text).length > 0
+        ? normalizeMultiline(next.bot_mode_reply_text)
+        : prev.bot_mode_reply_text,
   };
   const p = getUserConfigPath();
   await fs.mkdir(path.dirname(p), { recursive: true });
   await fs.writeFile(p, JSON.stringify(merged, null, 2), "utf8");
   return merged;
+}
+
+export async function processBotTick(args: {
+  holderId: string;
+  convType: ConversationType;
+  convId: string;
+  limit?: number;
+}): Promise<{ success: true; acquired: boolean; replied: number } | { success: false; error: string }> {
+  try {
+    const holderId = String(args.holderId || "").trim();
+    if (!holderId) return { success: false, error: "holderId required" } as const;
+
+    const convType = args.convType === "group" ? "group" : "agent";
+    const convId = String(args.convId || "").trim();
+    if (!convId) return { success: false, error: "convId required" } as const;
+
+    const cfg = await getUserConfig();
+
+    const lease = acquireWorkerLease({
+      leaseKey: `cue-console:bot-mode:${convType}:${convId}`,
+      holderId,
+      ttlMs: 5_000,
+    });
+    if (!lease.acquired) return { success: true, acquired: false, replied: 0 } as const;
+
+    const limit = Math.max(1, Math.min(200, args.limit ?? 50));
+    const pending =
+      convType === "agent"
+        ? getAgentPendingRequests(convId, limit)
+        : getGroupPendingRequests(convId).slice(0, limit);
+
+    let replied = 0;
+    const text = cfg.bot_mode_reply_text;
+    for (const r of pending) {
+      try {
+        sendResponse(String(r.request_id), { text }, false);
+        replied += 1;
+      } catch {
+        // ignore per-request failures
+      }
+    }
+
+    return { success: true, acquired: true, replied } as const;
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : String(e) } as const;
+  }
 }
 
 export async function fetchAgentDisplayNames(agentIds: string[]) {
@@ -358,6 +414,19 @@ export async function claimWorkerLease(args: {
   return acquireWorkerLease(args);
 }
 
+export async function fetchBotEnabled(type: ConversationType, id: string) {
+  return { enabled: getBotEnabledConversation(type, id) } as const;
+}
+
+export async function updateBotEnabled(type: ConversationType, id: string, enabled: boolean) {
+  setBotEnabledConversation(type, id, enabled);
+  return { success: true, enabled } as const;
+}
+
+export async function fetchBotEnabledConversations(limit?: number) {
+  return listBotEnabledConversations(limit);
+}
+
 // Responses
 export async function submitResponse(
   requestId: string,
@@ -510,6 +579,7 @@ export async function fetchConversationList(options?: {
     : groupsAll;
 
   const agentNameMap = getAgentDisplayNames(agents);
+  const agentEnvMap = getAgentEnvMap(agents);
 
   const groupIds = groups.map((g) => g.id);
   const groupMemberCounts = getGroupMemberCounts(groupIds);
@@ -596,6 +666,13 @@ export async function fetchConversationList(options?: {
       id: agent,
       name: agent,
       displayName: agentNameMap[agent] || agent,
+      agentRuntime: agentEnvMap[agent]?.agent_runtime || undefined,
+      projectName: (() => {
+        const p = agentEnvMap[agent]?.project_dir;
+        if (!p) return undefined;
+        const base = path.basename(String(p));
+        return base || undefined;
+      })(),
       pendingCount,
       lastMessage: (lastIsResp ? respMsg : reqMsg)?.slice(0, 50),
       lastTime: (lastIsResp ? lastRespTime : lastReqTime),
@@ -612,4 +689,21 @@ export async function fetchConversationList(options?: {
   });
 
   return items;
+}
+
+export async function fetchAgentEnv(agentId: string): Promise<{
+  agentRuntime?: string;
+  projectName?: string;
+}> {
+  const id = String(agentId || "").trim();
+  if (!id) return {};
+  const env = getAgentEnv(id);
+  const agentRuntime = env?.agent_runtime || undefined;
+  const projectName = (() => {
+    const p = env?.project_dir;
+    if (!p) return undefined;
+    const base = path.basename(String(p));
+    return base || undefined;
+  })();
+  return { agentRuntime, projectName };
 }

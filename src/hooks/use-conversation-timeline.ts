@@ -45,6 +45,16 @@ export function useConversationTimeline({
 
   const loadSeqRef = useRef(0);
   const pendingNonPauseSeenRef = useRef<Set<string>>(new Set());
+  const soundEnabledRef = useRef(soundEnabled);
+  const playDingRef = useRef(playDing);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    playDingRef.current = playDing;
+  }, [playDing]);
 
   const keyForItem = useCallback((item: AgentTimelineItem) => {
     return item.item_type === "request"
@@ -97,7 +107,6 @@ export function useConversationTimeline({
 
       if (t0) {
         const t1 = performance.now();
-        // eslint-disable-next-line no-console
         console.log(
           `[perf] bootstrapConversation type=${type} id=${id} items=${asc.length} queue=${res.queue.length} ${(t1 - t0).toFixed(1)}ms`
         );
@@ -116,7 +125,7 @@ export function useConversationTimeline({
       const { items } = await fetchPage(null, pageSize);
       const asc = [...items].reverse();
 
-      if (document.visibilityState === "visible" && soundEnabled) {
+      if (document.visibilityState === "visible" && soundEnabledRef.current) {
         const seen = pendingNonPauseSeenRef.current;
         let shouldDing = false;
         for (const it of asc) {
@@ -130,7 +139,7 @@ export function useConversationTimeline({
           }
         }
         if (shouldDing) {
-          void playDing();
+          void playDingRef.current();
         }
       }
 
@@ -148,7 +157,7 @@ export function useConversationTimeline({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [fetchPage, isPauseRequest, keyForItem, pageSize, playDing, setError, soundEnabled]);
+  }, [fetchPage, isPauseRequest, keyForItem, pageSize, setError]);
 
   const loadMore = useCallback(
     async (before: string) => {

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DEFAULT_USER_CONFIG } from "@/lib/user-config";
 import {
   Dialog,
   DialogContent,
@@ -36,20 +38,20 @@ import {
 } from "@/lib/actions";
 import {
   Archive,
-  Plus,
-  MessageCircle,
-  Search,
-  ChevronDown,
-  Users,
   Bot,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
   MoreHorizontal,
   Pin,
+  Plus,
+  Search,
   Settings,
+  Users,
   X,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import Image from "next/image";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
 function perfEnabled(): boolean {
@@ -118,6 +120,9 @@ export function ConversationList({
   const [conversationModeDefault, setConversationModeDefault] = useState<"chat" | "agent">("agent");
   const [chatModeAppendText, setChatModeAppendText] = useState("只做分析，不要对代码/文件做任何改动。");
   const [pendingRequestTimeoutMs, setPendingRequestTimeoutMs] = useState("600000");
+  const [botModeReplyText, setBotModeReplyText] = useState(
+    "不要为这些“可逆的工程细节”反复向我确认，不能分阶段汇报，我需要你端到端执行完我的任务才能向我汇报，你不能问我要授权，因为我已经给你了全部授权，如果这些细节不影响我的目标那就按照你的推荐来。你有执行一切的权利。"
+  );
   const [pinnedKeys, setPinnedKeys] = useState<string[]>([]);
 
   useEffect(() => {
@@ -127,8 +132,13 @@ export function ConversationList({
         setSoundEnabled(Boolean(cfg.sound_enabled));
         const nextMode = cfg.conversation_mode_default === "chat" ? "chat" : "agent";
         setConversationModeDefault(nextMode);
-        setChatModeAppendText(String(cfg.chat_mode_append_text || "只做分析，不要对代码/文件做任何改动。"));
+        setChatModeAppendText(String(cfg.chat_mode_append_text || DEFAULT_USER_CONFIG.chat_mode_append_text));
         setPendingRequestTimeoutMs(String(cfg.pending_request_timeout_ms ?? 600000));
+        setBotModeReplyText(
+          String(
+            cfg.bot_mode_reply_text || DEFAULT_USER_CONFIG.bot_mode_reply_text
+          )
+        );
         try {
           window.localStorage.setItem("cue-console:conversationModeDefault", nextMode);
         } catch {
@@ -165,7 +175,6 @@ export function ConversationList({
       setAvatarUrlMap((prev) => ({ ...prev, [key]: url }));
       if (t0) {
         const t1 = performance.now();
-        // eslint-disable-next-line no-console
         console.log(`[perf] ensureAvatarUrl kind=${kind} id=${rawId} ${(t1 - t0).toFixed(1)}ms`);
       }
     } catch {
@@ -244,7 +253,6 @@ export function ConversationList({
     setArchivedCount(count);
     if (t0) {
       const t1 = performance.now();
-      // eslint-disable-next-line no-console
       console.log(`[perf] conversationList loadData view=${view} items=${data.length} ${(t1 - t0).toFixed(1)}ms`);
     }
   }, [view]);
@@ -324,14 +332,19 @@ export function ConversationList({
     };
   }, [ensureAvatarUrl, items]);
 
+  const loadDataRef = useRef(loadData);
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  }, [loadData]);
+
   useEffect(() => {
     const t0 = setTimeout(() => {
-      void loadData();
+      void loadDataRef.current();
     }, 0);
 
     const tick = () => {
       if (document.visibilityState !== "visible") return;
-      void loadData();
+      void loadDataRef.current();
     };
 
     const interval = setInterval(tick, 10_000);
@@ -347,7 +360,7 @@ export function ConversationList({
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [loadData]);
+  }, []);
 
   useEffect(() => {
     if (!menu.open) return;
@@ -418,7 +431,6 @@ export function ConversationList({
   }, [agentsAll, pinnedKeys, pinnedSet]);
 
   const groupsPendingTotal = groups.reduce((sum, g) => sum + g.pendingCount, 0);
-  const agentsPendingTotal = agents.reduce((sum, a) => sum + a.pendingCount, 0);
 
   const isCollapsed = !!collapsed;
 
@@ -432,14 +444,6 @@ export function ConversationList({
   );
 
   const selectedKeyList = useMemo(() => Array.from(selectedKeys), [selectedKeys]);
-
-  const isSelectable = useCallback(
-    (item: ConversationItem) => {
-      if (view === "archived") return true;
-      return true;
-    },
-    [view]
-  );
 
   const toggleSelected = useCallback(
     (key: string) => {
@@ -502,6 +506,16 @@ export function ConversationList({
   }, []);
 
   useEffect(() => {
+    return () => {
+      // Clean up all pending delete timers on unmount
+      for (const timer of deleteTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      deleteTimersRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     if (pendingDelete.length > 0) {
       queueMicrotask(() => setUndoToastKey((v) => v + 1));
     }
@@ -532,7 +546,7 @@ export function ConversationList({
       confirmLabel: "Delete",
       destructive: true,
     });
-  }, [selectedKeyList, scheduleDelete, clearBulk]);
+  }, [selectedKeyList]);
 
   const handleArchiveAll = useCallback(async () => {
     if (view !== "active") return;
@@ -548,7 +562,7 @@ export function ConversationList({
       description: `Archive ${keys.length} conversation(s) (current filter, only pending == 0). You can unarchive later.`,
       confirmLabel: "Archive",
     });
-  }, [view, filtered, loadData]);
+  }, [view, filtered]);
 
   return (
     <div
@@ -830,10 +844,9 @@ export function ConversationList({
                       bulkMode={bulkMode}
                       checked={selectedKeys.has(conversationKey(item))}
                       onToggleChecked={() => toggleSelected(conversationKey(item))}
-                      view={view}
                       onClick={() => {
                         if (bulkMode) {
-                          if (isSelectable(item)) toggleSelected(conversationKey(item));
+                          toggleSelected(conversationKey(item));
                           return;
                         }
                         onSelect(item.id, "group", item.name);
@@ -873,10 +886,9 @@ export function ConversationList({
                       bulkMode={bulkMode}
                       checked={selectedKeys.has(conversationKey(item))}
                       onToggleChecked={() => toggleSelected(conversationKey(item))}
-                      view={view}
                       onClick={() => {
                         if (bulkMode) {
-                          if (isSelectable(item)) toggleSelected(conversationKey(item));
+                          toggleSelected(conversationKey(item));
                           return;
                         }
                         onSelect(item.id, "agent", item.name);
@@ -1259,6 +1271,41 @@ export function ConversationList({
               </Button>
             </div>
           </div>
+
+          <div className="mt-6">
+            <div className="text-sm font-medium">Bot reply text</div>
+            <div className="text-xs text-muted-foreground">
+              Multi-line
+            </div>
+            <div className="mt-2 flex items-start justify-end gap-2">
+              <textarea
+                value={botModeReplyText}
+                onChange={(e) => setBotModeReplyText(e.target.value)}
+                placeholder="Bot reply"
+                className="min-h-24 flex-1 min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-9 rounded-md px-3 text-xs"
+                onClick={async () => {
+                  const next = botModeReplyText;
+                  try {
+                    await setUserConfig({ bot_mode_reply_text: next });
+                  } catch {
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent("cue-console:configUpdated", {
+                      detail: { bot_mode_reply_text: next },
+                    })
+                  );
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1332,7 +1379,14 @@ function ConversationIconButton({
       title={item.displayName}
     >
       {avatarUrl ? (
-        <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full" />
+        <Image
+          src={avatarUrl}
+          alt=""
+          width={28}
+          height={28}
+          unoptimized
+          className="h-7 w-7 rounded-full"
+        />
       ) : (
         <span className="text-xl">{emoji}</span>
       )}
@@ -1352,7 +1406,6 @@ function ConversationItemCard({
   bulkMode,
   checked,
   onToggleChecked,
-  view,
 }: {
   item: ConversationItem;
   avatarUrl?: string;
@@ -1362,9 +1415,9 @@ function ConversationItemCard({
   bulkMode?: boolean;
   checked?: boolean;
   onToggleChecked?: () => void;
-  view?: "active" | "archived";
 }) {
   const emoji = item.type === "group" ? "👥" : getAgentEmoji(item.name);
+  const showAgentTags = item.type === "agent" && (item.agentRuntime || item.projectName);
 
   return (
     <button
@@ -1392,7 +1445,14 @@ function ConversationItemCard({
       <span className="relative h-9 w-9 shrink-0">
         <span className="flex h-full w-full items-center justify-center rounded-full bg-white/55 ring-1 ring-white/40 text-[18px] overflow-hidden">
           {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full rounded-full" />
+            <Image
+              src={avatarUrl}
+              alt=""
+              width={36}
+              height={36}
+              unoptimized
+              className="h-full w-full rounded-full"
+            />
           ) : (
             emoji
           )}
@@ -1413,6 +1473,20 @@ function ConversationItemCard({
             </span>
           )}
         </div>
+        {showAgentTags && (
+          <div className="mt-0.5 flex flex-wrap gap-1">
+            {item.agentRuntime && (
+              <span className="inline-flex items-center rounded-full border bg-white/55 px-2 py-0.5 text-[10px] text-muted-foreground">
+                {item.agentRuntime}
+              </span>
+            )}
+            {item.projectName && (
+              <span className="inline-flex items-center rounded-full border bg-white/55 px-2 py-0.5 text-[10px] text-muted-foreground">
+                {item.projectName}
+              </span>
+            )}
+          </div>
+        )}
         {item.lastMessage && (
           <p className="text-[11px] text-muted-foreground whitespace-nowrap leading-4">
             {truncateText(item.lastMessage.replace(/\n/g, ' '), 20)}
