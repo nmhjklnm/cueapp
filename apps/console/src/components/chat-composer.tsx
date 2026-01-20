@@ -12,9 +12,16 @@ import {
   type SetStateAction,
 } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn, getAgentEmoji } from "@/lib/utils";
 import { setAgentDisplayName } from "@/lib/actions";
-import { CornerUpLeft, GripVertical, Plus, Send, Trash2, X } from "lucide-react";
+import { Bot, CornerUpLeft, GripVertical, Plus, Send, Trash2, X } from "lucide-react";
+import Image from "next/image";
 
 type MentionDraft = {
   userId: string;
@@ -69,8 +76,11 @@ export function ChatComposer({
   setInput,
   images,
   setImages,
-  setNotice,
   setPreviewImage,
+  botEnabled,
+  botLoaded,
+  botLoadError,
+  onToggleBot,
   handleSend,
   enqueueCurrent,
   queue,
@@ -111,8 +121,11 @@ export function ChatComposer({
   setInput: Dispatch<SetStateAction<string>>;
   images: { mime_type: string; base64_data: string; file_name?: string }[];
   setImages: Dispatch<SetStateAction<{ mime_type: string; base64_data: string; file_name?: string }[]>>;
-  setNotice: Dispatch<SetStateAction<string | null>>;
   setPreviewImage: Dispatch<SetStateAction<{ mime_type: string; base64_data: string } | null>>;
+  botEnabled: boolean;
+  botLoaded: boolean;
+  botLoadError: string | null;
+  onToggleBot: () => Promise<boolean>;
   handleSend: () => void | Promise<void>;
   enqueueCurrent: () => void;
   queue: QueuedMessage[];
@@ -152,6 +165,8 @@ export function ChatComposer({
   }, [onBack]);
 
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [botToggling, setBotToggling] = useState(false);
+  const [botConfirmOpen, setBotConfirmOpen] = useState(false);
   const isComposingRef = useRef(false);
 
   const submitOrQueue = () => {
@@ -251,15 +266,66 @@ export function ChatComposer({
             </div>
           )}
 
+          <Dialog open={botConfirmOpen} onOpenChange={setBotConfirmOpen}>
+            <DialogContent className="sm:max-w-110">
+              <DialogHeader>
+                <DialogTitle>Enable bot mode?</DialogTitle>
+              </DialogHeader>
+
+              <div className="text-sm text-muted-foreground space-y-3">
+                <p>
+                  Bot mode will automatically reply to <span className="text-foreground font-medium">cue</span> requests
+                  in this conversation.
+                </p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Only affects the current {type === "group" ? "group" : "agent"} conversation.</li>
+                  <li>May immediately reply to currently pending cue requests.</li>
+                  <li>Does not reply to pause confirmations.</li>
+                  <li>You can turn it off anytime.</li>
+                </ul>
+              </div>
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={botToggling}
+                  onClick={() => setBotConfirmOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={botToggling}
+                  onClick={async () => {
+                    if (botToggling) return;
+                    setBotToggling(true);
+                    try {
+                      await onToggleBot();
+                      setBotConfirmOpen(false);
+                    } finally {
+                      setBotToggling(false);
+                    }
+                  }}
+                >
+                  {botToggling ? "Enabling…" : "Enable"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           {/* Image Preview */}
           {images.length > 0 && (
             <div className="flex max-w-full gap-2 overflow-x-auto px-0.5 pt-0.5">
               {images.map((img, i) => (
                 <div key={i} className="relative shrink-0">
                   {img.mime_type.startsWith("image/") ? (
-                    <img
+                    <Image
                       src={`data:${img.mime_type};base64,${img.base64_data}`}
                       alt=""
+                      width={64}
+                      height={64}
+                      unoptimized
                       className="h-16 w-16 rounded-xl object-cover shadow-sm ring-1 ring-border/60 cursor-pointer"
                       onClick={() => setPreviewImage(img)}
                     />
@@ -614,6 +680,87 @@ export function ChatComposer({
               >
                 Queue
               </Button>
+
+              <button
+                type="button"
+                disabled={busy || botToggling || !botLoaded}
+                className={cn(
+                  "relative h-8 px-3 rounded-xl transition-all duration-200",
+                  "flex items-center gap-1.5",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  botEnabled
+                    ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                    : botLoadError
+                      ? "bg-red-500/10 hover:bg-red-500/20 text-red-500 ring-1 ring-red-500/30"
+                      : "bg-white/10 hover:bg-white/20 text-muted-foreground"
+                )}
+                onClick={async () => {
+                  if (busy || botToggling) return;
+                  if (!botLoaded) return;
+                  if (!botEnabled) {
+                    setBotConfirmOpen(true);
+                    return;
+                  }
+                  setBotToggling(true);
+                  try {
+                    await onToggleBot();
+                  } finally {
+                    setBotToggling(false);
+                  }
+                }}
+                aria-label={botEnabled ? "Stop bot" : "Start bot"}
+                title={
+                  !botLoaded
+                    ? "Bot status loading…"
+                    : botToggling
+                      ? "Turning…"
+                      : botLoadError
+                        ? "Bot state sync error"
+                        : botEnabled
+                          ? "Bot is active - click to stop"
+                          : "Start bot mode"
+                }
+              >
+                {/* Custom SVG icon */}
+                <svg
+                  className={cn(
+                    "w-4 h-4 transition-transform duration-200",
+                    botEnabled && "scale-110"
+                  )}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {/* Robot head */}
+                  <rect x="6" y="8" width="12" height="10" rx="2" />
+                  {/* Antenna */}
+                  <path d="M12 8V5" />
+                  <circle cx="12" cy="4" r="1" fill="currentColor" />
+                  {/* Eyes */}
+                  <circle cx="9.5" cy="12" r="1" fill="currentColor" />
+                  <circle cx="14.5" cy="12" r="1" fill="currentColor" />
+                  {/* Mouth */}
+                  <path d="M9 15h6" />
+                  {/* Arms */}
+                  <path d="M6 13H4" />
+                  <path d="M20 13h-2" />
+                </svg>
+                
+                <span className="text-xs font-medium">
+                  {botToggling ? "..." : botEnabled ? "ON" : "Bot"}
+                </span>
+                
+                {/* Status indicator dot */}
+                {!botLoaded && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                )}
+                {botLoadError && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                )}
+              </button>
             </div>
 
             <Button

@@ -7,7 +7,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ClipboardEvent,
 } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -19,13 +18,16 @@ import {
 } from "@/components/ui/dialog";
 import { cn, getAgentEmoji } from "@/lib/utils";
 import { randomSeed } from "@/lib/avatar";
+import Image from "next/image";
 import {
   setAgentDisplayName,
   setGroupName,
   submitResponse,
   cancelRequest,
-  batchRespond,
-  type CueRequest,
+  processBotTick,
+  fetchBotEnabled,
+  updateBotEnabled,
+  fetchAgentEnv,
 } from "@/lib/actions";
 import { ChatComposer } from "@/components/chat-composer";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,7 +46,7 @@ import { useMessageSender } from "@/hooks/use-message-sender";
 import { useFileHandler } from "@/hooks/use-file-handler";
 import { useDraftPersistence } from "@/hooks/use-draft-persistence";
 import { isPauseRequest, filterPendingRequests } from "@/lib/chat-logic";
-import type { ChatType, MentionDraft } from "@/types/chat";
+import type { ChatType } from "@/types/chat";
 import { ArrowDown } from "lucide-react";
 
 function perfEnabled(): boolean {
@@ -77,6 +79,10 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
   const deferredInput = useDeferredValue(input);
   const imagesRef = useRef(images);
 
+  const [botEnabled, setBotEnabled] = useState(false);
+  const [botLoaded, setBotLoaded] = useState(false);
+  const [botLoadError, setBotLoadError] = useState<string | null>(null);
+
   const { soundEnabled, setSoundEnabled, playDing } = useAudioNotification();
 
   const {
@@ -98,10 +104,24 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
   const [members, setMembers] = useState<string[]>([]);
   const [agentNameMap, setAgentNameMap] = useState<Record<string, string>>({});
   const [groupTitle, setGroupTitle] = useState<string>(name);
+  const [agentRuntime, setAgentRuntime] = useState<string | undefined>(undefined);
+  const [projectName, setProjectName] = useState<string | undefined>(undefined);
   const [previewImage, setPreviewImage] = useState<{ mime_type: string; base64_data: string } | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
   const [composerPadPx, setComposerPadPx] = useState(36 * 4);
+
+  const botHolderIdRef = useRef<string>(
+    (() => {
+      try {
+        return globalThis.crypto?.randomUUID?.() || `bot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      } catch {
+        return `bot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+    })()
+  );
+  const botTickBusyRef = useRef(false);
+  const currentConvRef = useRef({ type, id });
 
   const nextCursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
@@ -143,12 +163,11 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
 
   const {
     queue,
-    refreshQueue,
+    setQueue,
     enqueueCurrent,
     removeQueued,
     recallQueued,
     reorderQueue,
-    setQueue,
   } = useMessageQueue({
     type,
     id,
@@ -179,6 +198,32 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
   }, [agentNameMap, groupTitle, id, type]);
 
   useEffect(() => {
+    if (type !== "agent") {
+      setAgentRuntime(undefined);
+      setProjectName(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const env = await fetchAgentEnv(id);
+        if (cancelled) return;
+        setAgentRuntime(env.agentRuntime);
+        setProjectName(env.projectName);
+      } catch {
+        if (cancelled) return;
+        setAgentRuntime(undefined);
+        setProjectName(undefined);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, type]);
+
+  useEffect(() => {
     if (type !== "group") return;
     queueMicrotask(() => setGroupTitle(name));
   }, [name, type]);
@@ -206,6 +251,163 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
     perfEnabled,
     setError,
   });
+
+  const triggerBotTickOnce = useCallback(async () => {
+    if (document.visibilityState !== "visible") return;
+    if (botTickBusyRef.current) return;
+    botTickBusyRef.current = true;
+    try {
+      const res = await processBotTick({
+        holderId: botHolderIdRef.current,
+        convType: type,
+        convId: id,
+        limit: 80,
+      });
+      if (!res.success) {
+        setNotice(`Bot tick failed: ${res.error}`);
+        return;
+      }
+      if (!res.acquired) {
+        setNotice("Bot is busy in another window");
+        return;
+      }
+      if (res.replied === 0) {
+        setNotice("Bot is enabled (no pending to reply)");
+        return;
+      }
+      if (res.replied > 0) {
+        await refreshLatest();
+      }
+    } catch {
+    } finally {
+      botTickBusyRef.current = false;
+    }
+  }, [id, refreshLatest, setNotice, type]);
+
+  const toggleBot = useCallback(async (): Promise<boolean> => {
+    if (!botLoaded) {
+      setNotice("Bot status is still loading");
+      return botEnabled;
+    }
+    const prev = botEnabled;
+    const next = !prev;
+    try {
+      await updateBotEnabled(type, id, next);
+      setBotEnabled(next);
+      setBotLoadError(null);
+      if (next) void triggerBotTickOnce();
+      return next;
+    } catch {
+      setBotEnabled(prev);
+      setNotice("Failed to toggle bot");
+      return prev;
+    }
+  }, [botEnabled, botLoaded, id, setNotice, triggerBotTickOnce, type]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Update current conversation ref
+    currentConvRef.current = { type, id };
+    
+    // Immediately reset bot state when switching conversations
+    setBotEnabled(false);
+    setBotLoaded(false);
+    setBotLoadError(null);
+    botTickBusyRef.current = false;
+    
+    void (async () => {
+      try {
+        const res = await fetchBotEnabled(type, id);
+        // Check if conversation hasn't changed during async operation
+        if (cancelled || currentConvRef.current.type !== type || currentConvRef.current.id !== id) return;
+        setBotEnabled(Boolean(res.enabled));
+        setBotLoaded(true);
+        setBotLoadError(null);
+      } catch {
+        if (cancelled || currentConvRef.current.type !== type || currentConvRef.current.id !== id) return;
+        setBotEnabled(false);
+        setBotLoaded(true);
+        setBotLoadError("Failed to sync bot state");
+        setNotice("Failed to sync bot state (may still be enabled in background)");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, type, setNotice]);
+
+  useEffect(() => {
+    if (!botLoaded) return;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetchBotEnabled(type, id);
+        // Check if conversation hasn't changed during async operation
+        if (cancelled || currentConvRef.current.type !== type || currentConvRef.current.id !== id) return;
+        const next = Boolean(res.enabled);
+        setBotEnabled(next);
+        setBotLoadError(null);
+      } catch {
+        if (cancelled || currentConvRef.current.type !== type || currentConvRef.current.id !== id) return;
+        setBotLoadError("Failed to sync bot state");
+      }
+    };
+
+    const interval = setInterval(() => void tick(), 3000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      clearInterval(interval);
+    };
+  }, [botLoaded, id, type]);
+
+  useEffect(() => {
+    if (!botEnabled) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (document.visibilityState !== "visible") return;
+      if (botTickBusyRef.current) return;
+      botTickBusyRef.current = true;
+      try {
+        const res = await processBotTick({
+          holderId: botHolderIdRef.current,
+          convType: type,
+          convId: id,
+          limit: 80,
+        });
+        if (cancelled) return;
+        if (!res.success) {
+          setNotice(`Bot tick failed: ${res.error}`);
+          return;
+        }
+        if (!res.acquired) return;
+        if (res.replied > 0) {
+          await refreshLatest();
+        }
+      } catch {
+      } finally {
+        botTickBusyRef.current = false;
+      }
+    };
+
+    void tick();
+    const interval = setInterval(() => void tick(), 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [botEnabled, id, refreshLatest, setNotice, type]);
 
 
   const handleTitleChange = async (newTitle: string) => {
@@ -257,7 +459,6 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
         await ensureAvatarUrl("agent", id);
         if (t0) {
           const t1 = performance.now();
-          // eslint-disable-next-line no-console
           console.log(`[perf] ensureAvatarUrl(agent) id=${id} ${(t1 - t0).toFixed(1)}ms`);
         }
       })();
@@ -270,7 +471,6 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
       await ensureAvatarUrl("group", id);
       if (t0) {
         const t1 = performance.now();
-        // eslint-disable-next-line no-console
         console.log(`[perf] ensureAvatarUrl(group) id=${id} ${(t1 - t0).toFixed(1)}ms`);
       }
     })();
@@ -285,7 +485,6 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
       }
       if (t0) {
         const t1 = performance.now();
-        // eslint-disable-next-line no-console
         console.log(`[perf] ensureAvatarUrl(group members) group=${id} n=${members.length} ${(t1 - t0).toFixed(1)}ms`);
       }
     })();
@@ -371,7 +570,7 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
     setImages([]);
     imagesRef.current = [];
     setMentions([]);
-  }, [type, id]);
+  }, [type, id, setBusy, setError, setImages, setInput, setMentions, setNotice]);
 
   const loadMore = useCallback(async () => {
     if (!nextCursor) return;
@@ -414,7 +613,7 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
     el.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [loadMore]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -505,7 +704,7 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
     if (!notice) return;
     const t = setTimeout(() => setNotice(null), 2200);
     return () => clearTimeout(t);
-  }, [notice]);
+  }, [notice, setNotice]);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -560,6 +759,8 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
         titleDisplay={titleDisplay}
         avatarUrl={type === "group" ? avatarUrlMap[`group:${id}`] : avatarUrlMap[`agent:${id}`]}
         members={members}
+        agentRuntime={agentRuntime}
+        projectName={projectName}
         onBack={onBack}
         onAvatarClick={() => openAvatarPicker({ kind: type, id })}
         onTitleChange={handleTitleChange}
@@ -657,16 +858,19 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
         onBack={onBack}
         busy={busy}
         canSend={canSend}
-        hasPendingRequests={hasPendingRequests}
+        hasPendingRequests={pendingRequests.length > 0}
         input={input}
         conversationMode={conversationMode}
         setConversationMode={setConversationMode}
         setInput={setInput}
         images={images}
         setImages={setImages}
-        setNotice={setNotice}
         setPreviewImage={setPreviewImage}
-        handleSend={send}
+        botEnabled={botEnabled}
+        botLoaded={botLoaded}
+        botLoadError={botLoadError}
+        onToggleBot={toggleBot}
+        handleSend={() => void send()}
         enqueueCurrent={enqueueCurrent}
         queue={queue}
         removeQueued={removeQueued}
@@ -688,7 +892,7 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
         pointerInMentionRef={pointerInMentionRef}
         mentionScrollTopRef={mentionScrollTopRef}
         closeMention={closeMention}
-        insertMention={insertMention}
+        insertMention={insertMentionAtCursor}
         updateMentionFromCursor={updateMentionFromCursor}
         draftMentions={mentions}
         setDraftMentions={setMentions}
@@ -704,10 +908,13 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
           {previewImage ? (
             <div className="flex items-center justify-center">
               {((img) => (
-                <img
+                <Image
                   src={`data:${img.mime_type};base64,${img.base64_data}`}
                   alt=""
-                  className="max-h-[70vh] rounded-lg"
+                  width={1200}
+                  height={800}
+                  unoptimized
+                  className="max-h-[70vh] h-auto w-auto rounded-lg"
                 />
               ))(previewImage!)}
             </div>
@@ -728,7 +935,14 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
                   return (
                     <div className="h-14 w-14 rounded-full bg-muted overflow-hidden">
                       {avatarUrlMap[key] ? (
-                        <img src={avatarUrlMap[key]} alt="" className="h-full w-full" />
+                        <Image
+                          src={avatarUrlMap[key]}
+                          alt=""
+                          width={56}
+                          height={56}
+                          unoptimized
+                          className="h-full w-full"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xl">
                           {target.kind === "group" ? "👥" : getAgentEmoji(id)}
@@ -774,7 +988,16 @@ function ChatViewContent({ type, id, name, onBack }: ChatViewProps) {
                     }}
                     title="Apply"
                   >
-                    {c.url ? <img src={c.url} alt="" className="h-full w-full" /> : null}
+                    {c.url ? (
+                      <Image
+                        src={c.url}
+                        alt=""
+                        width={48}
+                        height={48}
+                        unoptimized
+                        className="h-full w-full"
+                      />
+                    ) : null}
                   </button>
                 ))}
                 </div>
