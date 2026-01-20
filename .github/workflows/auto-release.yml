@@ -1,0 +1,121 @@
+name: Auto Release on npm Package Update
+
+on:
+  schedule:
+    # Check for updates every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check for npm package updates
+        id: check
+        run: |
+          set -euo pipefail
+          
+          # Get current versions from apps/console/package.json
+          CURRENT_CONSOLE=$(node -p "require('./apps/console/package.json').version")
+          
+          # Get latest versions from npm
+          LATEST_CONSOLE=$(npm view cue-console version 2>/dev/null || echo "0.0.0")
+          LATEST_CUEME=$(npm view cueme version 2>/dev/null || echo "0.0.0")
+          
+          echo "current_console=$CURRENT_CONSOLE" >> $GITHUB_OUTPUT
+          echo "latest_console=$LATEST_CONSOLE" >> $GITHUB_OUTPUT
+          echo "latest_cueme=$LATEST_CUEME" >> $GITHUB_OUTPUT
+          
+          # Check if update is needed
+          if [ "$CURRENT_CONSOLE" != "$LATEST_CONSOLE" ]; then
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "Console update available: $CURRENT_CONSOLE -> $LATEST_CONSOLE"
+          else
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "No updates needed"
+          fi
+
+      - name: Trigger sync workflow if needed
+        if: steps.check.outputs.needs_update == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering console sync workflow..."
+          gh workflow run sync-console-subtree.yml
+
+      - name: Wait for sync to complete
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          echo "Waiting 60 seconds for sync workflow to complete..."
+          sleep 60
+
+      - name: Pull latest changes
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          git pull origin main
+
+      - name: Get updated console version
+        if: steps.check.outputs.needs_update == 'true'
+        id: new_version
+        run: |
+          NEW_VERSION=$(node -p "require('./apps/console/package.json').version")
+          echo "console_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Updated to console version: $NEW_VERSION"
+
+      - name: Bump desktop version
+        if: steps.check.outputs.needs_update == 'true'
+        id: bump
+        run: |
+          cd apps/desktop
+          CURRENT=$(node -p "require('./package.json').version")
+          
+          # Parse version (assuming semver x.y.z)
+          IFS='.' read -r major minor patch <<< "$CURRENT"
+          NEW_PATCH=$((patch + 1))
+          NEW_VERSION="$major.$minor.$NEW_PATCH"
+          
+          # Update package.json
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Bumped desktop version: $CURRENT -> $NEW_VERSION"
+
+      - name: Commit version bump
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          git config user.name "cueapp-bot"
+          git config user.email "cueapp-bot@users.noreply.github.com"
+          git add apps/desktop/package.json
+          git commit -m "chore: bump desktop to v${{ steps.bump.outputs.new_version }} (console v${{ steps.new_version.outputs.console_version }})"
+          git push origin main
+
+      - name: Create release tag
+        if: steps.check.outputs.needs_update == 'true'
+        run: |
+          VERSION="v${{ steps.bump.outputs.new_version }}"
+          git tag -a "$VERSION" -m "Release $VERSION
+
+Features from cue-console v${{ steps.new_version.outputs.console_version }}:
+- Synced latest cue-console updates
+- See cue-console changelog for details
+
+Auto-generated release triggered by npm package update."
+          git push origin "$VERSION"
+          echo "Created and pushed tag: $VERSION"
